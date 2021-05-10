@@ -1,0 +1,580 @@
+---
+title: "Analysis2"
+author: "Sara Bolf, Leslie An, Camille Little"
+date: "12/14/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = TRUE,include=FALSE}
+#import necessary packages
+library(dplyr)
+library(lubridate)
+library(cluster)
+library(ggplot2)
+library(glmnet)
+library(nnet)
+library(MASS)
+library(tree)
+library(randomForest)
+library(caret)
+library(xtable)
+library(leaps)
+```
+
+
+```{r, echo = TRUE}
+#import data
+
+data<-read.csv("/Users/Sara/Downloads/new.csv", header = TRUE,stringsAsFactors = FALSE, fileEncoding="latin1")
+
+```
+
+#Dropped irrelvant columns and transformed certain columns
+```{r, echo = TRUE}
+#Remove irrelevant columns and transform certain variables to factors or integers
+
+# drop unnecessary columns from data
+
+drop <- c("url","id","floor","tradeTime","Cid","DOM","totalPrice","constructionTime")
+
+data <- data[,!(names(data) %in% drop)]
+
+# transform columns to integers
+
+data$livingRoom = as.integer(data$livingRoom)
+
+data$drawingRoom = as.integer(data$drawingRoom)
+
+data$bathRoom = as.integer(data$bathRoom)
+
+# omit NA's
+
+data = na.omit(data)
+
+```
+#Data Split  
+```{r}
+# Split Data into two data sets: data1 and data2.  data1 is the data set with 50% of data, randomly chosen, and data2 is the data set with the other 50% of the data.
+
+splitsize = floor(.50*(nrow(data)))
+
+set.seed(123)
+
+split1 = sample(1:nrow(data),size=splitsize)
+
+data1 = data[split1,]
+
+data2 = data[-split1,]
+
+```
+
+# Exploratory Data Analysis
+
+
+```{r}
+# Histogram of prices
+
+ggplot(data1, aes(x=price)) + geom_histogram()
+
+```
+
+```{r}
+# predictors without categorical variables
+
+X = data1[,c(-10,-11,-12,-15,-16,-17)]
+
+```
+
+```{r}
+# Principal Component Analysis
+
+pc = princomp(X,cor=TRUE)
+
+```
+
+```{r}
+# Plot CPVE 
+
+prinvar = pc$sdev^2 # variance 
+
+pveprin = prinvar/sum(prinvar) # PVE
+
+cpveprin = cumsum(pveprin) # cumulative PVE = CPVE
+
+plot(cpveprin, xlab="Principal Component ", ylab="Cumulative Proportion of Variance Explained ", ylim=c(0,1),type='b')
+
+abline(h=0.95,col="red")
+
+```
+
+```{r}
+# Plot longitude vs. latitude, colored by district
+
+qplot(X$Lng, X$Lat,color=as.factor(data1$district),xlab="Longitude",ylab="Latitude")+labs(colour="District")
+
+```
+
+
+# Analysis
+
+# Regression Analysis
+
+```{r, echo = TRUE}
+# subset data
+
+subset_data<- sample(1:nrow(data1), size = 5000)
+
+subset_data<-data1[subset_data,]
+
+```
+
+```{r, echo = TRUE}
+#Remove certain columns
+
+subset_data<-subset(subset_data, select=-c(buildingType, buildingStructure, Lng, Lat))
+
+```
+
+```{r, echo = TRUE}
+#Standardize Data
+
+x = subset_data
+x$district = as.character(x$district)
+x$fiveYearsProperty = as.character(x$fiveYearsProperty)
+x$subway = as.character(x$subway)
+x$renovationCondition = as.character(x$renovationCondition)
+x$livingRoom = as.integer(x$livingRoom)
+x$drawingRoom = as.integer(x$drawingRoom)
+x$bathRoom = as.integer(x$bathRoom)
+for (j in 1:length(x)){  
+  if ( typeof(x[1,j])!= "character") {
+    x[,j] = (x[,j] - mean(x[,j])) / sd(x[,j])
+    
+    }
+}
+
+```
+
+
+```{r}
+# Run OLS
+
+ols = lm(price ~ ., data = x)
+
+summary(ols)
+
+```
+
+```{r}
+# Ridge Regression
+
+set.seed(123)
+
+x_ridge = model.matrix(price~.,x)[,-1]
+
+y_ridge = x$price
+
+lambda_vec = exp(seq(-10,0,len=1000))
+
+cv.out = cv.glmnet(x_ridge, y_ridge, alpha = 0, lambda=lambda_vec)
+
+ridge_lambda = cv.out$lambda.min
+
+ridge_lambda
+
+```
+
+```{r}
+# Plot Ridge Regression
+
+ridge = glmnet(x_ridge, y_ridge, alpha = 0, lambda = lambda_vec)
+
+par(mfrow=c(1,2),mar=c(4,4,0,2))
+
+plot(cv.out,xlab=expression(log~lambda))
+
+plot(ridge,xvar='lambda',xlab=expression(log~lambda))
+
+abline(v=log(ridge_lambda),lty=2)
+
+```
+
+```{r}
+# Lasso Regression
+
+set.seed(123)
+
+x_lasso = model.matrix(price ~ ., x)[,-1]
+
+y_lasso = x$price
+
+lambda_vec = exp(seq(-10,0,len=1000))
+
+cv.out = cv.glmnet(x_lasso, y_lasso, alpha = 1, lambda=lambda_vec)
+
+lasso_lambda = cv.out$lambda.min
+
+lasso_lambda
+
+```
+
+```{r, echo = TRUE}
+# Plot Lasso 
+
+lasso = glmnet(x_lasso, y_lasso, alpha = 1, lambda = lambda_vec)
+
+par(mfrow=c(1,2),mar=c(4,4,0,2))
+
+plot(cv.out,xlab=expression(log~lambda))
+
+plot(lasso,xvar='lambda',xlab=expression(log~lambda))
+
+abline(v=log(lasso_lambda),lty=2)
+
+```
+
+
+```{r}
+# Elastic Net
+
+set.seed(123)
+
+x_enet = model.matrix(price ~ ., x)[,-1]
+
+y_enet = x$price 
+
+cv.out = cv.glmnet(x_enet, y_enet, alpha = 0.7, lambda=lambda_vec)
+
+enet_lambda = cv.out$lambda.min
+
+enet_lambda
+
+```
+
+
+```{r}
+# Plot Elastic Net
+
+enet = glmnet(x_enet, y_enet, alpha = 0.7, lambda = lambda_vec)
+
+par(mfrow=c(1,2),mar=c(4,4,0,2))
+
+plot(cv.out,xlab=expression(log~lambda))
+
+plot(enet,xvar='lambda',xlab=expression(log~lambda))
+
+abline(v=log(enet_lambda),lty=2)
+
+```
+
+
+```{r, echo = TRUE }
+# Sample from DATA2
+
+set.seed(1234)
+test_data<- sample(1:nrow(data2), size = 5000)
+test_data<-data2[test_data,]
+test_data<-subset(test_data, select=-c(buildingType, buildingStructure, Lng, Lat))
+test_data<-na.omit(test_data)
+
+x2 = test_data
+x2$district = as.character(x2$district)
+x2$fiveYearsProperty = as.character(x2$fiveYearsProperty)
+x2$subway = as.character(x2$subway)
+x2$renovationCondition = as.character(x2$renovationCondition)
+x2$livingRoom = as.integer(x2$livingRoom)
+x2$drawingRoom = as.integer(x2$drawingRoom)
+x2$bathRoom = as.integer(x2$bathRoom)
+for (j in 1:length(x2)){  
+  if ( typeof(x2[1,j])!= "character") {
+    x2[,j] = (x2[,j] - mean(x2[,j])) / sd(x2[,j])
+    
+    }
+    }
+```
+
+
+```{r, echo = TRUE}
+# MSE for OLS
+
+y = (x2$price - mean(x2$price)) / sd(x2$price)
+
+test_mat = model.matrix(price ~ ., data = x2)[,-1]
+
+ols_pred = predict(ols, newdata=x2)
+
+ols_error = (y - ols_pred)^2
+
+ols_MSE = mean(ols_error)
+
+ols_MSE
+
+```
+
+
+```{r, echo = TRUE}
+# MSE for Ridge 
+
+ridge_pred = predict(ridge, s = ridge_lambda, newx = test_mat)
+
+ridge_error = (y - ridge_pred) ^2
+
+ridge_MSE = mean(ridge_error)
+
+ridge_MSE
+```
+
+```{r, echo = TRUE}
+# MSE for LASSO
+
+lasso_pred = predict(lasso, s = lasso_lambda, newx = test_mat)
+
+lasso_error = (y - lasso_pred)^2
+
+lasso_MSE = mean(lasso_error)
+
+lasso_MSE
+
+```
+
+```{r, echo = TRUE}
+# MSE for Elastic Net
+
+enet_pred = predict(enet, s = enet_lambda, newx = test_mat)
+
+enet_error = (y - enet_pred)^2
+
+enet_MSE = mean(enet_error)
+
+enet_MSE
+
+```
+
+
+```{r, echo = TRUE}
+# Plot Goodness of Fit for Elastic Net
+
+plot(x2$price, ylab = "Price")
+
+lines(enet_pred)
+
+```
+
+
+
+```{r, each = TRUE}
+# Table of errors and lambdas
+
+mean_error<- matrix(c(ols_MSE ,ridge_MSE, lasso_MSE, enet_MSE),nrow=4,byrow=TRUE)
+
+lambda_vec <- matrix(c("NA",ridge_lambda, lasso_lambda, enet_lambda),nrow=4,byrow=TRUE)
+
+finalvec = cbind(mean_error,lambda_vec)
+
+rownames(finalvec) <- c("OLS","Ridge", "Lasso", "Elastic Net")
+
+colnames(finalvec) <- c("Mean Squared Error","Lambda")
+
+final_table <- as.table(finalvec)
+
+final_table
+
+```
+
+# Classification Analysis
+
+
+```{r}
+# transform columns to factors
+
+data1$fiveYearsProperty = as.factor(data1$fiveYearsProperty)
+
+data1$buildingType = as.factor(data1$buildingType)
+
+data1$renovationCondition = as.factor(data1$renovationCondition)
+
+data1$buildingStructure = as.factor(data1$buildingStructure)
+
+data1$subway = as.factor(data1$subway)
+
+data1$district = as.factor(data1$district)
+
+data2$fiveYearsProperty = as.factor(data2$fiveYearsProperty)
+
+data2$buildingType = as.factor(data2$buildingType)
+
+data2$renovationCondition = as.factor(data2$renovationCondition)
+
+data2$buildingStructure = as.factor(data2$buildingStructure)
+
+data2$subway = as.factor(data2$subway)
+
+data2$district = as.factor(data2$district)
+
+
+```
+
+```{r}
+# Further split data1 and data2, randomly sampling 5% of data1 and data2, in order to simplify calculations.
+
+samplesize = floor(.05*nrow(data1))
+
+sample1 = sample(1:nrow(data1),size=samplesize)
+
+data1sub = data1[sample1,]
+
+samplesize = floor(.05*nrow(data2))
+
+sample1 = sample(1:nrow(data2),size=samplesize)
+
+data2sub = data2[sample1,]
+
+```
+
+
+```{r}
+# Remove latitude and longitude columns
+
+data1sub2 = data1sub[,3:ncol(data1sub)]
+
+data2sub2 = data2sub[,3:ncol(data2sub)]
+
+# make sure factor levels are equal
+
+
+```
+
+
+
+```{r}
+# multinomial model
+
+fit_nom = multinom(district ~., data = data1sub2)
+
+```
+
+```{r}
+# predictors without categorical variables
+
+X = data1sub[,c(-10,-11,-12,-15,-16,-17)]
+
+```
+
+
+```{r}
+# QDA model
+
+X2 = data.frame(X[,3:ncol(X)])
+
+X2 = X2[,-6]
+
+X2$district = data1sub$district # create a data set with only continuous predictors and response
+                                # district
+
+mod2 = qda(district~.,data=X2) # QDA
+
+```
+
+
+```{r}
+# decision tree
+
+set.seed(1)
+
+full_tree = tree(district ~., data = data1sub2)
+
+candidates = cv.tree(full_tree)
+
+fit_tree = prune.misclass(full_tree, best = candidates$size[which.min(candidates$dev)])
+
+plot(fit_tree)
+
+text(fit_tree, pretty = 0)
+
+```
+
+
+```{r}
+# Random Forest
+
+fit_rf2 = randomForest(district ~., data = data1sub2, mtry = 4, importance = T, ntree = 1000)
+
+importtab2 = importance(fit_rf2) # Table with variable importance
+
+importtab2[,14:15]
+
+varImpPlot(fit_rf2)
+
+```
+
+```{r}
+# Plot of longitude and latitude with colors given by district predicted by random forest
+
+plot(data2sub$Lng,data2sub$Lat,col= (predict(fit_rf2,data2sub2,type="class")),pch=16,xlab="Longitude",ylab="Latitude")
+
+legend("topright",legend=sort(unique(predict(fit_rf2,data2sub2,type="class"))),col=sort(unique(predict(fit_rf2,data2sub2,type="class"))),pch=16)
+
+```
+
+
+
+```{r}
+# Total Test Error for multinomial logistic regression
+
+predlog1 = predict(fit_nom,data2sub2,type="class")
+
+telog1 = mean(predlog1!=data2sub2$district)
+
+```
+
+```{r}
+# Total Test Error for QDA
+
+predqda1 = predict(mod2,data2sub2,type="class")
+
+teqda1 = mean(predqda1$class!=data2sub2$district)
+
+```
+
+
+```{r}
+# Total Test Error for decision Tree
+
+predtree1 = predict(fit_tree,data2sub2,type="class")
+
+tetree1 = mean(predtree1!=data2sub2$district)
+
+```
+
+
+```{r}
+# Total Test Error for Random Forest
+
+predrf1 = predict(fit_rf2,data2sub2,type="class")
+
+terf1 = mean(predrf1!=data2sub2$district)
+
+```
+
+
+```{r}
+# Table for test errors for different classification methods
+
+te1 = matrix(c(telog1,teqda1,tetree1,terf1),ncol=1,byrow=TRUE)
+
+rownames(te1) <- c("Multinomial Logistic","QDA","Tree","Random Forest (m=4)")
+
+colnames(te1) <- c("Test Total Error")
+
+te1tab <- as.table(te1) # create table
+
+te1tab
+
+```
+
+
+
