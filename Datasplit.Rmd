@@ -1,0 +1,183 @@
+---
+title: "Data Split"
+author: "Sara Bolf"
+date: "11/03/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = TRUE}
+#import necessary packages
+library(dplyr)
+library(lubridate)
+```
+
+```{r, echo = TRUE}
+#import data
+data<-read.csv("/Users/Sara/Downloads/new.csv", header = TRUE,stringsAsFactors = FALSE, fileEncoding="latin1")
+
+```
+
+#Dropped three irrelvant columns
+```{r, echo = TRUE}
+#Remove irrelevant columns
+drop <- c("url","id","floor")
+data<- data[,!(names(data) %in% drop)]
+
+
+```
+
+
+#Convert categorical building types
+```{r, ehco = TRUE}
+data$tower = as.integer(data$buildingType ==1)
+data$tower[is.na(data$tower)] <-0 
+
+
+data$bungalow = as.integer(data$buildingType ==2)
+data$bungalow[is.na(data$bungalow)] <-0
+
+data$pt = as.integer(data$buildingType==3)
+data$pt[is.na(data$pt)] <-0
+
+data$plate = as.integer(data$buildingType ==4)
+data$plate[is.na(data$plate)] <- 0
+
+
+```
+
+
+
+# Convert categorical Renovation Condition
+```{r, echo = TRUE}
+
+data$other = as.integer(data$renovationCondition ==1)
+data$other[is.na(data$other)] <-0 
+
+
+data$rough = as.integer(data$renovationCondition ==2)
+data$rough[is.na(data$rough)] <-0
+
+data$Simplicity = as.integer(data$renovationCondition==3)
+data$Simplicity[is.na(data$Simplicity)] <-0
+
+data$hardcover = as.integer(data$renovationCondition ==4)
+data$hardcover[is.na(data$hardcover)] <- 0
+
+```
+
+
+
+# Convert Building Structing
+```{r, echo = TRUE}
+data$unknow = as.integer(data$buildingStructure ==1)
+data$unknow[is.na(data$unkow)] <-0 
+
+
+data$mixed = as.integer(data$buildingStructure ==2)
+data$mixed[is.na(data$mixed)] <-0
+
+data$bw = as.integer(data$buildingStructure==3)
+data$bw[is.na(data$bw)] <-0
+
+data$bc = as.integer(data$buildingStructure ==4)
+data$bc[is.na(data$bc)] <- 0
+
+data$steel = as.integer(data$buildingStructure ==5)
+data$steel[is.na(data$steel)] <- 0
+
+
+data$scc = as.integer(data$buildingStructure ==6)
+data$scc[is.na(data$scc)] <- 0
+
+```
+
+# Convert Districts
+```{r, echo = TRUE}
+
+data$district_one = as.integer(data$district ==1)
+data$disctrict_one[is.na(data$district_one)] <-0 
+
+
+data$district_two = as.integer(data$district ==2)
+data$disctrict_two[is.na(data$district_two)] <-0 
+
+data$district_three = as.integer(data$district ==3)
+data$disctrict_three[is.na(data$district_three)] <-0 
+
+data$district_four = as.integer(data$district ==4)
+data$disctrict_four[is.na(data$district_four)] <-0 
+
+data$district_five = as.integer(data$district ==5)
+data$disctrict_five[is.na(data$district_five)] <-0 
+
+
+data$district_six = as.integer(data$district ==6)
+data$disctrict_six[is.na(data$district_six)] <-0
+
+
+data$district_seven = as.integer(data$district ==7)
+data$disctrict_seven[is.na(data$district_seven)] <-0 
+
+
+data$district_eight = as.integer(data$district ==8)
+data$disctrict_eight[is.na(data$district_eight)] <-0 
+
+
+
+data$district_nine = as.integer(data$district ==9)
+data$disctrict_nine[is.na(data$district_nine)] <-0
+
+
+data$district_ten = as.integer(data$district ==10)
+data$disctrict_ten[is.na(data$district_ten)] <-0 
+
+
+data$district_eleven = as.integer(data$district ==11)
+data$disctrict_eleven[is.na(data$district_eleven)] <-0 
+
+
+data$district_twelve = as.integer(data$district ==12)
+data$disctrict_twelve[is.na(data$district_twelve)] <-0 
+
+
+
+
+
+data$district_thirteen = as.integer(data$district ==13)
+data$disctrict_thirteen[is.na(data$district_thirteen)] <-0 
+
+
+
+
+
+
+```
+
+
+#Data Split  
+```{r}
+# Split Data into two data sets: data1 and data2.  data1 is the data set with the first 20% of data, with the earliest trade times, and data2 is the data set with the last 80% of the data.
+
+data$tradeTime = as.Date(data$tradeTime)
+
+data = data[with(data,order(tradeTime)),]
+
+splitsize = floor(.20*(nrow(data)))
+
+data1 = data[1:splitsize,]
+
+data2 = data[(splitsize+1):nrow(data),]
+
+```
+
+#save DATA, DATA1, and DATA2 as csv files.
+```{r}
+write.csv(data,'DATA.csv')
+write.csv(data1,'DATA1.csv')
+write.csv(data2,'DATA2.csv')
+```
+
